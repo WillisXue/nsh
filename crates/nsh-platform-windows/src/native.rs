@@ -683,7 +683,15 @@ impl Hosted for ComponentItem {
             return false;
         };
         let notch = crate::window::lines_per_notch() * 16.0;
-        component.wheel(&Wheel {
+        component.wheel(&Wheel::new(x, y, event, notch))
+    }
+}
+
+impl Wheel {
+    /// `event` at `(x, y)` (component coordinates), `notch` points to a
+    /// notch.
+    fn new(x: f32, y: f32, event: &crate::input::WheelEvent, notch: f32) -> Self {
+        Wheel {
             x,
             y,
             dx: event.dx,
@@ -694,7 +702,7 @@ impl Hosted for ComponentItem {
             shift: event.modifiers.shift,
             ctrl: event.modifiers.ctrl,
             alt: event.modifiers.alt,
-        })
+        }
     }
 }
 
@@ -1008,5 +1016,39 @@ mod tests {
         assert!(components.factory(&"com.example.map".into()).is_some());
         assert!(components.factory(&"com.example.none".into()).is_none());
         assert_eq!(format!("{components:?}"), r#"{"com.example.map"}"#);
+    }
+
+    #[test]
+    fn wheel_counts_notches() {
+        use crate::input::{Modifiers, WheelEvent};
+        // A notch up with three lines of 16 points to a notch, Ctrl held.
+        let event = WheelEvent {
+            x: 300.0,
+            y: 200.0,
+            dx: 0.0,
+            dy: -48.0,
+            precise: false,
+            modifiers: Modifiers {
+                ctrl: true,
+                ..Modifiers::default()
+            },
+            time: 0.0,
+        };
+        let wheel = Wheel::new(12.0, 34.0, &event, 48.0);
+        assert_eq!((wheel.x, wheel.y), (12.0, 34.0));
+        assert_eq!((wheel.dx, wheel.dy), (0.0, -48.0));
+        assert_eq!((wheel.notches_x, wheel.notches_y), (0.0, -1.0));
+        assert!(wheel.ctrl && !wheel.shift && !wheel.alt && !wheel.precise);
+        // A touchpad's fraction of a notch, sideways.
+        let event = WheelEvent {
+            dx: 12.0,
+            dy: 0.0,
+            precise: true,
+            modifiers: Modifiers::default(),
+            ..event
+        };
+        let wheel = Wheel::new(0.0, 0.0, &event, 48.0);
+        assert_eq!((wheel.notches_x, wheel.notches_y), (0.25, 0.0));
+        assert!(wheel.precise && !wheel.ctrl);
     }
 }
