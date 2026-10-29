@@ -152,6 +152,44 @@ pub trait NativeComponent {
     fn set_animated_color(&mut self, name: &str, argb: u32) {
         self.set_prop(name, Some(&JsonValue::from(argb)));
     }
+
+    /// A wheel or touchpad scroll over the component (an image viewer
+    /// zooms with it). True when it took it; otherwise the scroll views
+    /// around it scroll, as they do by default. Presses, moves and
+    /// releases go to its view's handlers (`onPress`, `onMouseMove`).
+    fn wheel(&mut self, event: &Wheel) -> bool {
+        let _ = event;
+        false
+    }
+}
+
+/// A wheel or touchpad scroll over a component ([`NativeComponent::wheel`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct Wheel {
+    /// Where the pointer is (points, the component's coordinates).
+    pub x: f32,
+    /// Where, vertically.
+    pub y: f32,
+    /// How far to scroll the content (points; positive toward the end:
+    /// right, down), as scroll views do.
+    pub dx: f32,
+    /// How far, vertically.
+    pub dy: f32,
+    /// The same in wheel notches (a mouse wheel's clicks): fractions from
+    /// precision touchpads and high-resolution wheels.
+    pub notches_x: f32,
+    /// In notches, vertically.
+    pub notches_y: f32,
+    /// From a precision touchpad or a high-resolution wheel (not whole
+    /// notches).
+    pub precise: bool,
+    /// Shift held.
+    pub shift: bool,
+    /// Ctrl held.
+    pub ctrl: bool,
+    /// Alt held.
+    pub alt: bool,
 }
 
 /// What a component can tell its app. Cheap to clone; usable from any
@@ -634,6 +672,29 @@ impl Hosted for ComponentItem {
             return;
         };
         self.placement.apply(&surface, self.id, hwnd, rect);
+    }
+
+    fn wheel(&self, x: f32, y: f32, event: &crate::input::WheelEvent) -> bool {
+        // Not while its own code runs (it asked for something that scrolls).
+        let Ok(mut component) = self.component.try_borrow_mut() else {
+            return false;
+        };
+        let Some(component) = component.as_mut() else {
+            return false;
+        };
+        let notch = crate::window::lines_per_notch() * 16.0;
+        component.wheel(&Wheel {
+            x,
+            y,
+            dx: event.dx,
+            dy: event.dy,
+            notches_x: event.dx / notch,
+            notches_y: event.dy / notch,
+            precise: event.precise,
+            shift: event.modifiers.shift,
+            ctrl: event.modifiers.ctrl,
+            alt: event.modifiers.alt,
+        })
     }
 }
 
