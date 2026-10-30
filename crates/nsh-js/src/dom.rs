@@ -1277,6 +1277,10 @@ fn set_prop(
             };
             return dom(cx).push(cx, Op::SetProp { id, prop });
         }
+        // SAFETY: an inline check of a borrowed value.
+        "tooltip" if unsafe { qjs::JS_IsFunction(cx, value) } && node_ptr(cx, value).is_null() => {
+            return tooltip_effect(cx, node, value);
+        }
         _ => {}
     }
     if let Some(prop) = crate::touch::touch_prop(name) {
@@ -1355,6 +1359,51 @@ fn set_prop(
         Ok(None) => Ok(()),
         Err(rquickjs::Error::Exception) => Err(qjs::JS_EXCEPTION),
         Err(e) => Err(throw_type(cx, &format!("nsh: prop `{name}`: {e}"))),
+    }
+}
+
+/// Sets the `tooltip` of `node` to what function `value` gives (both
+/// borrowed), kept up to date by a render effect: in a development bundle
+/// a component's element is its hot proxy's memo, not the element.
+fn tooltip_effect(cx: *mut JsContext, node: JsValue, value: JsValue) -> Result<(), JsValue> {
+    let mut data = [node, value];
+    // SAFETY: the function keeps dups of `data`.
+    let func =
+        unsafe { qjs::JS_NewCFunctionData(cx, Some(tooltip_run), 0, 0, 2, data.as_mut_ptr()) };
+    if unsafe { qjs::JS_IsException(func) } {
+        return Err(func);
+    }
+    let r = reactive::render_effect(cx, func);
+    unsafe { qjs::JS_FreeValue(cx, r) };
+    // A throw in the effect is the round's error.
+    let r = reactive::finish_value(cx, UNDEFINED);
+    if unsafe { qjs::JS_IsException(r) } {
+        Err(r)
+    } else {
+        Ok(())
+    }
+}
+
+/// The render effect of [`tooltip_effect`]: calls the function (tracked)
+/// and sets what it gives; a function again gets an effect of its own.
+unsafe extern "C" fn tooltip_run(
+    cx: *mut JsContext,
+    _this: JsValue,
+    _argc: c_int,
+    _argv: *mut JsValue,
+    _magic: c_int,
+    data: *mut JsValue,
+) -> JsValue {
+    // SAFETY: two data values (`tooltip_effect`); the call's result is
+    // owned and freed.
+    unsafe {
+        let r = qjs::JS_Call(cx, *data.add(1), UNDEFINED, 0, ptr::null_mut());
+        if qjs::JS_IsException(r) {
+            return r;
+        }
+        let set = set_prop(cx, *data, "tooltip", r, UNDEFINED);
+        qjs::JS_FreeValue(cx, r);
+        set.err().unwrap_or(UNDEFINED)
     }
 }
 
@@ -4397,6 +4446,37 @@ mod tests {
                 .any(|o| matches!(o, Op::Animation(AnimationOp::Release { .. }))),
             "{ops:?}"
         );
+    }
+
+    /// A `tooltip` given by a memo (a component's element in a development
+    /// bundle: its hot proxy's) is the element the memo gives, and follows it.
+    #[test]
+    fn a_tooltip_given_by_a_memo_follows_it() {
+        let host = Host::new().unwrap();
+        host.eval_source(
+            r#"
+            import { computed, signal } from "nsh";
+            import { element, prop } from "nsh:rt";
+            const tips = [element("view"), element("view")];
+            const shown = signal(0);
+            prop(element("view"), "tooltip", computed(() => tips[shown()]));
+            shown.set(1);
+            "#,
+        )
+        .unwrap();
+        let mut ops = Vec::new();
+        host.take_ops(&mut ops);
+        let tooltips: Vec<_> = ops
+            .iter()
+            .filter_map(|o| match o {
+                Op::SetProp {
+                    prop: nsh_core::Prop::Tooltip(content),
+                    ..
+                } => Some(format!("{content:?}")),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(tooltips, ["Node(2)", "Node(4)"], "{ops:?}");
     }
 
     #[test]
