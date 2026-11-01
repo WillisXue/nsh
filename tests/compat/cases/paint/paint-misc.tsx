@@ -24,6 +24,12 @@ const CURSORS = [
   "col-resize",
   "row-resize",
   "none",
+  "nwse-resize",
+  "nesw-resize",
+  "nw-resize",
+  "se-resize",
+  "ne-resize",
+  "sw-resize",
 ] as const;
 
 function App() {
@@ -51,6 +57,8 @@ function App() {
       {CURSORS.map((cursor) => (
         <View testID={`cursor-${cursor}`} style={{ height: 2, cursor }} />
       ))}
+      <View testID="cursor-class-nwse" class="cursor-nwse-resize" />
+      <View testID="cursor-class-nesw" class="cursor-nesw-resize" />
       <View
         testID="cursor-dynamic"
         style={{ height: 4, cursor: hideCursor() ? "none" : "crosshair" }}
