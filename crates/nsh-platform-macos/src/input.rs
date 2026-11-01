@@ -395,8 +395,10 @@ fn cursor_of(cursor: Cursor) -> Option<Cursor> {
 /// The AppKit cursor of `cursor` (AppKit has no public wait, progress or
 /// help cursors: those show the arrow).
 fn ns_cursor(cursor: Cursor) -> Retained<NSCursor> {
-    // Zoom and diagonal resize cursors need macOS 15.
-    let supported = |sel| NSCursor::class().responds_to(sel);
+    // Zoom and diagonal resize cursors need macOS 15. They are class
+    // methods: the metaclass answers for them (the class itself answers
+    // for its instances' methods).
+    let supported = |sel| NSCursor::class().metaclass().responds_to(sel);
     match cursor {
         Cursor::Pointer => NSCursor::pointingHandCursor(),
         Cursor::Text => NSCursor::IBeamCursor(),
