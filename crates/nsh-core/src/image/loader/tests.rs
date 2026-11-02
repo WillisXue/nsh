@@ -456,13 +456,8 @@ fn asset_directories_take_the_first_that_has_the_file() {
 
 #[test]
 fn resolves_uris() {
-    let dir = AssetBase::Directory("/app/assets".into());
     let http = AssetBase::Http("http://10.0.0.2:8080/assets/".into());
     let key = |uri, base| resolve(uri, base).map(|l: Location| l.key());
-    assert_eq!(
-        key("asset:/img/a.png", Some(&dir)).as_deref(),
-        Some("file:///app/assets/img/a.png")
-    );
     assert_eq!(
         key("asset:/a.png", Some(&http)).as_deref(),
         Some("http://10.0.0.2:8080/assets/a.png")
@@ -474,6 +469,11 @@ fn resolves_uris() {
     );
     #[cfg(unix)]
     {
+        let dir = AssetBase::Directory("/app/assets".into());
+        assert_eq!(
+            key("asset:/img/a.png", Some(&dir)).as_deref(),
+            Some("file:///app/assets/img/a.png")
+        );
         assert_eq!(
             key("file:///home/a%20b.png", None).as_deref(),
             Some("file:///home/a b.png")
