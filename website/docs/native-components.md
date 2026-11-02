@@ -658,15 +658,19 @@ fn components(components: &nsh_platform_windows::Components) {
 The platform is `windows`, `macos`, `linux` or `ios`, and the components are those of
 `nsh_platform_windows`, `nsh_platform_macos`, `nsh_platform_linux` or `nsh_platform_ios` (the sections above). The
 function compiles only on its platform, so a crate has one per platform it supports, each registering the same names,
-and depends on each platform's crate for that platform only:
+and depends on each platform's crate for that platform only, at the version and from the source of its other NSH
+crates (`nsh-core` and the rest; the CLI checks that they all match):
 
 ```toml
 [target.'cfg(windows)'.dependencies]
-nsh-platform-windows = { version = "0.1", default-features = false }
+nsh-platform-windows = { version = "0.3", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-nsh-platform-macos = { version = "0.1", default-features = false }
+nsh-platform-macos = { version = "0.3", default-features = false }
 ```
+
+The host registers the crate's components when it makes each view, before the code holding the view registers its
+own: a name registered on the view after that (`AppView::register_component`) replaces the crate's.
 
 ## Rules and limits
 

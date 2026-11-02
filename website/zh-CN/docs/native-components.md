@@ -633,15 +633,17 @@ fn components(components: &nsh_platform_windows::Components) {
 
 平台可以是 `windows`、`macos`、`linux` 或 `ios`，对应的组件分别来自 `nsh_platform_windows`、`nsh_platform_macos`、
 `nsh_platform_linux` 和 `nsh_platform_ios`（见上面各节）。这个函数只在它的平台上编译，所以 crate 为支持的每个平台各写一个，注册相同的名称，
-并且只在对应平台上依赖该平台的 crate：
+并且只在对应平台上依赖该平台的 crate，版本和来源与它的其他 NSH crate（`nsh-core` 等）相同（CLI 会检查它们是否一致）：
 
 ```toml
 [target.'cfg(windows)'.dependencies]
-nsh-platform-windows = { version = "0.1", default-features = false }
+nsh-platform-windows = { version = "0.3", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-nsh-platform-macos = { version = "0.1", default-features = false }
+nsh-platform-macos = { version = "0.3", default-features = false }
 ```
+
+宿主在创建每个视图时注册 crate 的组件，早于持有该视图的代码自己的注册：之后在视图上注册的同名组件（`AppView::register_component`）会替换 crate 的。
 
 ## 规则与限制
 
