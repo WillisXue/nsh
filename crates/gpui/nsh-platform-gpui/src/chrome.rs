@@ -146,7 +146,7 @@ enum Op {
     ToggleFullScreen,
     /// `setFrame`'s width and height (a missing one keeps the window's).
     Resize(Option<f32>, Option<f32>),
-    Close,
+    ClosePress,
     Quit,
     Hide,
     HideOthers,
@@ -389,8 +389,9 @@ pub(crate) fn command(surface: &Rc<Surface>, command: &DesktopCommand) {
         // Windows of the app's own (`Window.open`) are not on this backend yet:
         // the runtime does not send these here.
         DesktopCommand::Hide | DesktopCommand::OpenWindow(_) => {}
-        DesktopCommand::Close => push(surface, Op::Close),
-        DesktopCommand::Quit => push(surface, Op::Quit),
+        DesktopCommand::SetCloseOnPress(close) => surface.window_close.close_on_press.set(*close),
+        DesktopCommand::Close => finish_close_press(surface),
+        DesktopCommand::Quit => finish_close(surface, CloseRequest::Quit),
         // The backend for embedding: when the app restarts is the embedding
         // app's to decide.
         DesktopCommand::Restart => {}
@@ -427,7 +428,7 @@ pub(crate) fn command(surface: &Rc<Surface>, command: &DesktopCommand) {
 fn choose(surface: &Rc<Surface>, id: u32, role: Option<MenuRole>) {
     match role {
         Some(MenuRole::Quit) => push(surface, Op::Quit),
-        Some(MenuRole::Close) => push(surface, Op::Close),
+        Some(MenuRole::Close) => push(surface, Op::ClosePress),
         Some(MenuRole::Minimize) => push(surface, Op::Minimize),
         Some(MenuRole::Zoom) => push(surface, Op::ToggleMaximize),
         Some(MenuRole::ToggleFullScreen) => push(surface, Op::ToggleFullScreen),
@@ -647,7 +648,7 @@ pub(crate) fn shortcut(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
     }
     if pressed == primary('w') {
         if !event.repeat {
-            push(surface, Op::Close);
+            push(surface, Op::ClosePress);
         }
         return true;
     }
@@ -692,6 +693,40 @@ pub(crate) fn ask_to_close(
     };
     window.defer(cx, move |window, cx| handler(request, window, cx));
     true
+}
+
+/// Native controls, the Close menu role and the unbound close shortcut share
+/// one user action. A native embedding host keeps its existing authority.
+pub(crate) fn user_close(surface: &Surface, window: &mut Window, cx: &mut App) {
+    if !ask_to_close(surface, CloseRequest::Close, window, cx) {
+        crate::window_close::press(surface);
+    }
+}
+
+/// Finishes an allowed request without waiting for another rendered frame.
+/// Minimized windows and engines busy in JS still close on the native queue.
+pub(crate) fn finish_close_press(surface: &Surface) {
+    finish_close(surface, CloseRequest::Close);
+}
+
+fn finish_close(surface: &Surface, request: CloseRequest) {
+    let Some(handle) = surface.chrome.window.get() else {
+        return;
+    };
+    let key = surface.key();
+    crate::rt::on_app(move |cx| {
+        let _ = handle.update(cx, |_, window, cx| {
+            if let Some(surface) = Surface::by_key(key)
+                && !ask_to_close(&surface, request, window, cx)
+            {
+                surface.stop();
+                match request {
+                    CloseRequest::Close => window.remove_window(),
+                    CloseRequest::Quit => cx.quit(),
+                }
+            }
+        });
+    });
 }
 
 /// Carries out the queued window operations.
@@ -739,11 +774,7 @@ fn apply_ops(surface: &Surface, window: &mut Window, cx: &mut App) {
                 window.resize(size);
                 chrome.asked_size.set(Some(AskedSize { size, from }));
             }
-            Op::Close => {
-                if !ask_to_close(surface, CloseRequest::Close, window, cx) {
-                    window.remove_window();
-                }
-            }
+            Op::ClosePress => user_close(surface, window, cx),
             Op::Quit => {
                 if !ask_to_close(surface, CloseRequest::Quit, window, cx) {
                     cx.quit();
@@ -1135,7 +1166,7 @@ fn control_button(
             match control {
                 Control::Minimize => window.minimize_window(),
                 Control::Maximize => window.zoom_window(),
-                Control::Close => push(&s, Op::Close),
+                Control::Close => push(&s, Op::ClosePress),
             }
             s.invalidate();
             crate::rt::flush(cx);

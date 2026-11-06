@@ -11,6 +11,7 @@ import ModClipboard from "./mod-clipboard";
 import ModFps from "./mod-fps";
 import ModUrlScheme from "./mod-url-scheme";
 import ModDesktop from "./mod-desktop";
+import ModWindowClose from "./mod-window-close";
 import ModDevice from "./mod-device";
 import ModHost from "./mod-host";
 import ModHostChannel from "./mod-host-channel";
@@ -31,6 +32,7 @@ const cases: Record<string, () => JSX.Element> = {
   "mod-fps": ModFps,
   "mod-url-scheme": ModUrlScheme,
   "mod-desktop": ModDesktop,
+  "mod-window-close": ModWindowClose,
   "mod-device": ModDevice,
   "mod-host": ModHost,
   "mod-host-channel": ModHostChannel,
