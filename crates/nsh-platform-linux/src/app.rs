@@ -524,7 +524,7 @@ pub fn run_app(source: AppSource, mut options: AppOptions) -> glib::ExitCode {
             .build();
         let view = AppView::new(options.clone());
         window.set_child(Some(&view.widget()));
-        crate::window_close::attach(view.surface(), window.upcast_ref());
+        crate::window_close::attach(&view.surface, window.upcast_ref());
         match source {
             AppSource::Rust(root) => view.load(App::Rust(root)),
             AppSource::Bundle(bundle) => view.load(App::Js(bundle)),
